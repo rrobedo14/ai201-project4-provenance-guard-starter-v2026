@@ -39,7 +39,12 @@
 <!-- The path a submission takes, from arriving to the label a reader sees.
      Six or seven steps — this is the trace you wrote in Milestone 1. -->
 
-
+1. **Payload Extraction:** Parses the incoming JSON request to safely extract the `text` and `creator_id` fields.
+2. **Input Validation:** Checks whether `text` is a valid, non-empty string—returning a `400 Bad Request` error if validation fails.
+3. **Model Signal Execution:** Runs `detector.model_signal(text)` to compute the AI-likelihood score.
+4. **ID Generation:** Generates a unique tracking identifier (`content_id`) using a truncated UUID.
+5. **Audit Logging:** Records the decision, scores, and status into the audit database using `audit.log_decision()`.
+6. **Response Delivery:** Returns a structured JSON payload containing the generated `content_id`, scores, and preliminary status fields.
 
 ---
 
@@ -53,19 +58,25 @@
 
 ### Signal one — the model signal
 
-**What it measures:**
+**What it measures:** 
+Token predictability and perplexity—running a local model to evaluate how easily it can guess the text, converting that into a 0–1 score where higher means more likely AI.
 
 **Why that might differ between human and AI writing:**
+AI generates text by repeatedly picking likely next words, yielding low perplexity (text the model finds easy to predict). Human writing wanders more through odd word choices, abrupt turns, and specific details.
 
 **What it can't see:**
+It cannot see authorship or true intent. Instead, it rewards common words in short, ordinary sentences. Because of this, it has a major structural blind spot: it frequently mislabels second-language writers, younger writers, or anyone writing plainly as AI, while dense, ornate human prose with rare words often scores as human.
 
 ### Signal two — the style signal
 
 **What it measures:**
+The shape of the text without understanding a word, measured through three structural factors: sentence-length spread (whether sentences vary in length or march in step), type_token_ratio (how much of the vocabulary repeats), and punctuation_density (how much punctuation, and how varied).
 
 **Why that might differ between human and AI writing:**
+Generated prose tends toward even, mid-length sentences and a narrower band of vocabulary because that is what the "most likely next word" approach produces on average. Human writing is lumpier—such as placing a three-word sentence right next to a forty-word one.
 
 **What it can't see:**
+It cannot read and has no idea what the text actually says. Anything that changes the shape of the text without changing its substance—such as adding typos, breaking up sentences, or pasting in a quotation—moves the score, making it vulnerable to deliberate shape-altering tricks.
 
 ### The combining rule
 
@@ -73,8 +84,10 @@
      signals disagree? -->
 
 **The rule:**
+A weighted sum combining both 0–1 inputs (model_score and style_score) into a single 0–1 output score where higher values mean more likely AI. When the two signals disagree, the weighted average pulls the result toward the middle (representing "unsure" or systemic uncertainty).
 
 **The numbers:**
+config.WEIGHT_MODEL_SIGNAL * model_score + config.WEIGHT_STYLE_SIGNAL * style_score (using the weight multipliers configured in config.py).
 
 **Where it lives:** `scoring.py::combine_signals`
 
