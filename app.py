@@ -200,11 +200,17 @@ def submit():
     a malformed input is one of the most common real failures there is.
     """
 
-    
     payload = request.get_json(silent=True) or {}
     text = payload.get("text")
     creator_id = payload.get("creator_id", "unknown")
-    
+
+    # Step 2 : JSON goes in: pulls text and creator_id out of the body
+    if not isinstance(text, str) or not text.strip():
+        return jsonify({
+            "error": "bad_request",
+            "message": "Send JSON with a non-empty 'text' field.",
+        }), 400
+
     # Step 3 : One real signal that we fist tested from the terminal
     # python detector.py "Some text to test"  # returns a float between 0 and 1
 
@@ -219,14 +225,6 @@ def submit():
             model_score=model_score,
             status="decided",
         )
-
-    # Step 2 : JSON goes in: pulls text and creator_id out of the body
-    if not isinstance(text, str) or not text.strip():
-        return jsonify({
-            "error": "bad_request",
-            "message": "Send JSON with a non-empty 'text' field.",
-        }), 400
-
 
     # Step 1: - The route answers. Hardcoded without any logic.
     return jsonify({
