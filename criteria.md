@@ -42,65 +42,52 @@ Two things worth knowing before you pick numbers:
   a **miss**.
 
 ---
-## 1.
+
+# Acceptance criteria — Provenance Guard
+
+## 1. False positives
 
 <!-- Your criterion. It must name a number. -->
+Out of 10 pieces of plain, authentic human-authored text tested across three separate trial runs, at most 1 receives a high-confidence AI score (0.70 or higher).
 
-
-
-**Why this target:**
-
-
+**Why this target:** I allow at most 1 false positive in 10 because on a publishing platform, a wrong accusation costs a writer their trust and reputation, whereas a missed detection only lets a piece of AI text slip through.
 
 ---
 
-## 2.
+## 2. Score spread
 
 <!-- Your criterion. -->
+Across 10 clearly AI-generated samples and 10 clearly human baseline samples, the average combined scores stay separated by at least `0.35` units (AI scoring 0.70 or higher on average, human scoring 0.35 or lower).
 
-
-
-**Why this target:**
-
-
+**Why this target:** I require a 0.35 gap because a clear separation ensures the system has a distinct boundary between machine and human writing, preventing borderline inputs from collapsing into random guesses.
 
 ---
 
-## 3.
+## 3. Label coverage
 
 <!-- Your criterion. -->
+Across a test set of 15 diverse inputs, all three system labels (`likely_ai`, `uncertain`, and `likely_human`) appear at least twice.
 
-
-
-**Why this target:**
-
-
+**Why this target:** I require each label to appear at least twice because every label must be reachable so the system can properly signal ambiguity and nuance instead of forcing every edge case into an artificial binary.
 
 ---
 
-## 4.
+## 4. The appeal path
 
 <!-- Your criterion. -->
+100% of appeals submitted with a valid `content_id` successfully update the record status to `"appealed"` and write a corresponding entry to the audit log in a single request cycle.
 
-
-
-**Why this target:**
-
-
+**Why this target:** I set a 100% target because creators disputing a false flag need an ironclad guarantee that their dispute is reliably tracked and recorded for human review without dropping data.
 
 ---
 
-## 5.
+## 5. Bad input
 
 <!-- Your criterion. -->
+100% of requests with missing text, empty strings, or text exceeding token limits return an HTTP `400 Bad Request` status code without crashing or raising unhandled Python errors.
 
+**Why this target:** I set a 100% interception target because strict input validation protects the core detection models and database backends from failing on malformed or malicious data.
 
-
-**Why this target:**
-
-
-
----
 
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 8 — read this before you change anything above.

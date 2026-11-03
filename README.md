@@ -84,10 +84,10 @@ It cannot read and has no idea what the text actually says. Anything that change
      signals disagree? -->
 
 **The rule:**
-A weighted sum combining both 0–1 inputs (model_score and style_score) into a single 0–1 output score where higher values mean more likely AI. When the two signals disagree, the weighted average pulls the result toward the middle (representing "unsure" or systemic uncertainty).
+A weighted sum combining both 0–1 inputs (`model_score` and `style_score`) into a single 0–1 output score where higher values mean more likely AI. When the two signals disagree, the weighted average pulls the result toward the middle (representing "unsure" or systemic uncertainty).
 
 **The numbers:**
-config.WEIGHT_MODEL_SIGNAL * model_score + config.WEIGHT_STYLE_SIGNAL * style_score (using the weight multipliers configured in config.py).
+`config.WEIGHT_MODEL_SIGNAL * model_score + config.WEIGHT_STYLE_SIGNAL * style_score` (using the weight multipliers configured in `config.py`).
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -95,8 +95,8 @@ config.WEIGHT_MODEL_SIGNAL * model_score + config.WEIGHT_STYLE_SIGNAL * style_sc
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
-
-
+* **The Case:** When the two signals disagree—for example, when one signal registers high at `0.9` and the other registers low at `0.1`.
+* **What the rule does with it:** The weighted sum rule averages them out (landing near `0.5`), treating the disagreement between the two methods as structural uncertainty ("unsure") rather than forcing a confident binary verdict.
 
 ---
 
