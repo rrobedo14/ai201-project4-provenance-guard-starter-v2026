@@ -84,10 +84,15 @@ It cannot read and has no idea what the text actually says. Anything that change
      signals disagree? -->
 
 **The rule:**
-A weighted sum combining both 0–1 inputs (`model_score` and `style_score`) into a single 0–1 output score where higher values mean more likely AI. When the two signals disagree, the weighted average pulls the result toward the middle (representing "unsure" or systemic uncertainty).
+A weighted average of the two 0–1 signals, leaning on the model signal, plus one rule for disagreement: **if the two signals are far apart, the result can never be labelled AI.** It can still be "unsure", and it can still be "human". Two methods contradicting each other is not enough evidence to accuse someone, and on a writing site a wrong accusation costs more than a missed detection.
+
+The model signal gets more weight because it reads the words. The style signal only sees shape, and shape is the cheapest thing to change on purpose (adding typos or breaking up sentences).
 
 **The numbers:**
-`config.WEIGHT_MODEL_SIGNAL * model_score + config.WEIGHT_STYLE_SIGNAL * style_score` (using the weight multipliers configured in `config.py`).
+- `combined = 0.6 × model_score + 0.4 × style_score`
+- If `|model_score − style_score| > 0.30`, the combined score is capped at `AI_THRESHOLD − 0.01` (0.69), which keeps it inside the "unsure" band at most.
+- Thresholds: human ≤ 0.35, AI ≥ 0.70 (matching criterion 1).
+- All of these live in `config.py`: `WEIGHT_MODEL_SIGNAL`, `WEIGHT_STYLE_SIGNAL`, `DISAGREEMENT_GAP`, `HUMAN_THRESHOLD`, `AI_THRESHOLD`.
 
 **Where it lives:** `scoring.py::combine_signals`
 
@@ -95,8 +100,9 @@ A weighted sum combining both 0–1 inputs (`model_score` and `style_score`) int
      somewhere else, say where. -->
 
 **A case where my two signals split, and what my rule does with it:**
-* **The Case:** When the two signals disagree—for example, when one signal registers high at `0.9` and the other registers low at `0.1`.
-* **What the rule does with it:** The weighted sum rule averages them out (landing near `0.5`), treating the disagreement between the two methods as structural uncertainty ("unsure") rather than forcing a confident binary verdict.
+* **The Case:** `samples/borderline.json`, a human-style rewrite of the AI sample. Model signal `0.29` (the uncommon wording, e.g. "frazzled" and "wreck focus", is hard to predict, so it reads as human). Style signal `0.57` (the sentences are fairly even with little punctuation, so it reads as AI-ish).
+* **What the rule does with it:** `0.6 × 0.29 + 0.4 × 0.57 = 0.40`, which is **unsure**. The gap (0.28) is just under 0.30, so the cap doesn't trigger; the weighting alone keeps it out of the AI band. The cap is for wider splits: model `0.95` and style `0.60` would combine to `0.81` (an AI label), but the gap is `0.35`, so the cap pulls it down to `0.69`, which is **unsure**.
+* **What the rule can't fix:** a plainly written human paragraph scored `0.75` (model) and `0.85` (style). The signals *agree*, so the disagreement rule never fires and the combined `0.79` is labelled AI. Both signals share the same blind spot for plain writing, and no combining rule can correct that. The appeal path is that writer's only protection.
 
 ---
 

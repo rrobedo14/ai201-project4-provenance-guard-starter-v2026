@@ -63,9 +63,19 @@ def sentence_length_spread(text: str) -> float:
     Watch the edge case: a one-sentence submission has no spread at all, and
     `stdev` raises on fewer than two values. Decide what that should return
     before the attack set decides for you.
+
+    Scale: coefficient of variation (stdev / mean of words per sentence).
+    Higher = lumpier = more human. Around 0.4 on the AI sample, 1.1 on the
+    human one.
+
+    One sentence has no spread to measure, so it returns 0.60, the middle of
+    the range `style_signal` scales across, and counts as neither.
     """
-    # TODO: replace this
-    return 0.0
+    lengths = [len(words(s)) for s in sentences(text)]
+    lengths = [n for n in lengths if n > 0]
+    if len(lengths) < 2:
+        return 0.60
+    return statistics.stdev(lengths) / statistics.mean(lengths)
 
 
 def type_token_ratio(text: str) -> float:
@@ -80,8 +90,10 @@ def type_token_ratio(text: str) -> float:
     directly comparable on it, and if your test inputs vary a lot in length,
     that alone can look like a signal.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return 0.0
+    return len(set(tokens)) / len(tokens)
 
 
 def punctuation_density(text: str) -> float:
@@ -93,9 +105,16 @@ def punctuation_density(text: str) -> float:
         semicolons, dashes — is a real choice. Semicolons and em dashes are
         more interesting than full stops, because they vary more between
         writers.
+
+    Counts commas, semicolons, colons, dashes, brackets, quotes, ! and ? per
+    word. Full stops are left out: every text has them. Higher = busier =
+    more human. Around 0.05 on the AI sample, 0.11 on the human one.
     """
-    # TODO: replace this
-    return 0.0
+    tokens = words(text)
+    if not tokens:
+        return 0.0
+    marks = re.findall(r"[,;:—–()!?\"-]", text)
+    return len(marks) / len(tokens)
 
 
 # ── Combining them ───────────────────────────────────────────────────────────
@@ -121,9 +140,34 @@ def style_signal(text: str) -> float:
     clearly human, plain conventional human writing, lightly-edited AI — before
     you trust it. Plain and ordinary, not formal: formal prose reads as *human*
     to signal one, and it is plain writing that gets accused.
+
+    Decisions, written down:
+
+      1. Direction. All three measures run "higher = more human", so all
+         three get flipped: 1 - (scaled value).
+      2. Scale. Each raw measure is stretched across a range picked from the
+         sample files, then clipped to 0–1:
+           spread       0.30 (AI-even)  … 0.90 (human-lumpy)   CV of sentence lengths
+           TTR          0.60 (repetitive) … 0.85 (varied)
+           punctuation  0.04 (sparse)   … 0.12 (busy)          marks per word
+      3. Weights. Spread 0.45, punctuation 0.35, TTR 0.20. TTR gets the least
+         because it drifts with length — on the samples it actually scored the
+         human text as LESS varied than the AI text.
     """
-    # TODO: replace this
-    return 0.5
+    def scaled(value: float, low: float, high: float) -> float:
+        """Map value onto 0–1 across [low, high], clipped at both ends."""
+        return min(max((value - low) / (high - low), 0.0), 1.0)
+
+    # Too little text to measure shape at all — don't guess in either direction.
+    if len(words(text)) < 5:
+        return 0.5
+
+    spread_ai = 1.0 - scaled(sentence_length_spread(text), 0.30, 0.90)
+    ttr_ai = 1.0 - scaled(type_token_ratio(text), 0.60, 0.85)
+    punct_ai = 1.0 - scaled(punctuation_density(text), 0.04, 0.12)
+
+    score = 0.45 * spread_ai + 0.35 * punct_ai + 0.20 * ttr_ai
+    return round(score, 4)
 
 
 if __name__ == "__main__":

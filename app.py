@@ -215,26 +215,36 @@ def submit():
     # python detector.py "Some text to test"  # returns a float between 0 and 1
 
     import detector
-    model_score = detector.model_signal(text)
+    import scoring
+    import stylometry
 
-    # Step 4 - log the decision. The content_id is what /appeal needs later.
+    # Steps 5 & 6 : the second signal, then the combining rule
+    model_score = detector.model_signal(text)
+    style_score = stylometry.style_signal(text)
+    combined_score = scoring.combine_signals(model_score, style_score)
+
+    # Steps 4 & 7 - log BOTH signals beside the combined one.
+    # The content_id is what /appeal needs later.
     content_id = f"c_{uuid.uuid4().hex[:12]}"
     audit.log_decision(
             content_id=content_id,
             creator_id=creator_id,
             model_score=model_score,
+            style_score=style_score,
+            combined_score=combined_score,
             status="decided",
         )
 
-    # Step 1: - The route answers. Hardcoded without any logic.
+    # Label is still a placeholder until Milestone 5
     return jsonify({
-        "content_id" : "hardcoded",
+        "content_id" : content_id,
         "creator_id": creator_id,
         "guess": "unsure",
-        "confidence": model_score,
+        "confidence": combined_score,
         "label": "not built yet",
         "model_score": model_score,
-        "style_score": None,
+        "style_score": style_score,
+        "combined_score": combined_score,
     }), 200
 
     
