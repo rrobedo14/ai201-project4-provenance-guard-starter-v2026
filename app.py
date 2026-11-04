@@ -200,7 +200,9 @@ def submit():
     a malformed input is one of the most common real failures there is.
     """
 
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
     text = payload.get("text")
     creator_id = payload.get("creator_id", "unknown")
 
