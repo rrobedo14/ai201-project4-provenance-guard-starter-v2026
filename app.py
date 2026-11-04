@@ -223,25 +223,29 @@ def submit():
     style_score = stylometry.style_signal(text)
     combined_score = scoring.combine_signals(model_score, style_score)
 
+    # Step 8 : the label a reader actually sees
+    guess, label = scoring.score_to_label(combined_score)
+
     # Steps 4 & 7 - log BOTH signals beside the combined one.
     # The content_id is what /appeal needs later.
     content_id = f"c_{uuid.uuid4().hex[:12]}"
     audit.log_decision(
             content_id=content_id,
             creator_id=creator_id,
+            guess=guess,
             model_score=model_score,
             style_score=style_score,
             combined_score=combined_score,
+            label=label,
             status="decided",
         )
 
-    # Label is still a placeholder until Milestone 5
     return jsonify({
         "content_id" : content_id,
         "creator_id": creator_id,
-        "guess": "unsure",
+        "guess": guess,
         "confidence": combined_score,
-        "label": "not built yet",
+        "label": label,
         "model_score": model_score,
         "style_score": style_score,
         "combined_score": combined_score,
@@ -280,14 +284,45 @@ def appeal():
     to the person on the other end. It's the only thing standing between a
     wrong accusation and nothing at all.
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    content_id = payload.get("content_id")
+    reasoning = payload.get("reasoning")
 
-    # TODO: delete this and build the route.
+    if not isinstance(content_id, str) or not content_id.strip():
+        return jsonify({
+            "error": "bad_request",
+            "message": "Send JSON with the 'content_id' from your submission.",
+        }), 400
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return jsonify({
+            "error": "bad_request",
+            "message": "Tell us why you think the decision is wrong in 'reasoning'.",
+        }), 400
+
+    # Step 1 : the content_id has to match a real decision
+    decisions = [e for e in audit.entries_for(content_id) if e.get("status") == "decided"]
+    if not decisions:
+        return jsonify({
+            "error": "not_found",
+            "message": f"No submission found with content_id '{content_id}'.",
+        }), 404
+
+    # Step 2 : append the appeal beside the original decision — nothing is overwritten
+    entry = audit.log_appeal(
+        content_id=content_id,
+        creator_id=decisions[0]["creator_id"],
+        reasoning=reasoning.strip(),
+    )
+
+    # Step 3 : confirm to the writer
     return jsonify({
-        "error": "not_implemented",
-        "message": "POST /appeal isn't built yet — see the TODO in app.py.",
-        "you_sent": payload,
-    }), 501
+        "content_id": content_id,
+        "status": entry["status"],
+        "message": "Your appeal has been received. A person will review this "
+                   "decision, and the original label is now marked as under review.",
+    }), 200
 
 
 # ── Already works ─────────────────────────────────────────────────────────────

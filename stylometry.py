@@ -108,7 +108,7 @@ def punctuation_density(text: str) -> float:
 
     Counts commas, semicolons, colons, dashes, brackets, quotes, ! and ? per
     word. Full stops are left out: every text has them. Higher = busier =
-    more human. Around 0.05 on the AI sample, 0.11 on the human one.
+    more human. Around 0.05 on the AI sample, 0.12 on the human one.
     """
     tokens = words(text)
     if not tokens:
