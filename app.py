@@ -208,6 +208,7 @@ def submit():
 
     # Step 2 : JSON goes in: pulls text and creator_id out of the body
     if not isinstance(text, str) or not text.strip():
+        audit.log_rejection(creator_id=creator_id, reason="bad_request")
         return jsonify({
             "error": "bad_request",
             "message": "Send JSON with a non-empty 'text' field.",
