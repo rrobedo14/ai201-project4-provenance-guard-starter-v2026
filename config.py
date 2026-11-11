@@ -54,8 +54,11 @@ DETECTOR_MAX_TOKENS = 400
 # down BEFORE you code it, and to put the numbers in your README. Whatever you
 # decide, it goes here.
 
-WEIGHT_MODEL_SIGNAL = 0.6
-WEIGHT_STYLE_SIGNAL = 0.4
+# Unit 8: reweighted from 0.6 / 0.4. Signal two saturates on plain human
+# writing (all three style measures max out on my own pieces), so its weight
+# is halved. 0.2 keeps it in the score without letting it carry it.
+WEIGHT_MODEL_SIGNAL = 0.8
+WEIGHT_STYLE_SIGNAL = 0.2
 
 # When the two signals are further apart than this, the combined score is
 # capped below AI_THRESHOLD: a split can come out "unsure", never "AI".

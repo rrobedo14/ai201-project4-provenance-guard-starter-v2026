@@ -685,15 +685,19 @@ never tested how I handle a form-encoded or `text/plain` body.
 
 **Criterion misses from the run log**
 
-**Criterion 1 missed (4 of 10). Stage: signal two, mostly
-`punctuation_density`.** Three misses are spec-style assignment writing, the
+**Criterion 1 missed (4 of 10). Stage: signal two, the whole signal
+saturating.** Three misses are spec-style assignment writing, the
 same mechanism as FP02–FP07 above. Piece 7 is the new finding. It's casual,
 has typos, and is clearly personal, and it still scored 0.82 with a style
 score of 0.97. My writing uses long run-on sentences with very few commas or
 dashes. `punctuation_density` counts commas, dashes, colons and brackets per
 word and treats *few* as machine-like. AI text is low on them because it's
 tidy. My writing is low on them because I under-punctuate. The measure can't
-tell the two apart. Every one of my ten pieces had a style score of 0.83–1.0
+tell the two apart. And it isn't only punctuation. When I broke the style
+score down, sentence spread and word variety also scored 0.85–1.0 "AI" on
+almost every piece. The scaling ranges in `stylometry.style_signal` were
+set from a handful of sample files and are too narrow, so ordinary writing
+pins all three measures at the top. Every one of my ten pieces had a style score of 0.83–1.0
 except the one-sentence email, where the style signal falls back to neutral.
 The model signal on my four flagged pieces was only moderate (0.70–0.72), so
 signal two is what pushed them over.
@@ -750,20 +754,151 @@ wrong label came from a wrong score upstream.
 
 **What I changed:**
 
+One setting in `config.py`, used by `scoring.py::combine_signals`:
+`WEIGHT_MODEL_SIGNAL` went from **0.6 to 0.8**, and `WEIGHT_STYLE_SIGNAL` from
+**0.4 to 0.2**. Signal two now counts half as much. Thresholds (0.35 / 0.70),
+the disagreement gap (0.30) and the route are unchanged, so any difference in
+the after run comes from the weights alone.
+
 **Which diagnosis pointed at it:**
+
+Pattern 1 and the criterion 1 and 2 diagnoses: signal two can't tell plain
+human writing from AI writing. On my own pieces, all three style measures
+(sentence spread, punctuation, word variety) scored 0.85–1.0 "AI" on almost
+every piece, so the style score sat at 0.83–1.0 whatever I wrote. If one
+signal is saturated, the fix that follows is to let it count less.
+
+Before changing anything, I replayed my recorded scores through every weighting
+from 0.6/0.4 to 1.0/0.0. None of them got criterion 1 under 2 of 10. Even with
+the style signal switched off entirely, 3 of my 10 pieces stay above 0.70,
+because signal one also scores them 0.70–0.72. I chose 0.8/0.2 anyway because
+it was the best trade for criterion 2: it widens the gap without throwing signal
+two away. I went in expecting criterion 1 not to move.
 
 ### Attack Run — After
 
-<!-- Same format. `run_attacks.py --label after` -->
+From `results/attack_run_2026-11-10_1952_after.md`, produced by
+`run_attacks.py::main` against `app.py::submit` with the new weights. Verdicts
+use the same rules as the before run. **20 broke, 36 held, the same as
+before.**
 
+| ID | Family | Targeting | Status | Content ID | Guess | Score | Verdict |
+|---|---|---|---|---|---|---|---|
+| EV01 | evasion | signal two: typos raise word variety | 200 | `c_ec08191ae0b2` | human | 0.285 | BROKE |
+| EV02 | evasion | signal two: broken-up sentences raise length spread | 200 | `c_7eede6d6690d` | unsure | 0.554 | BROKE |
+| EV03 | evasion | signal two: a pasted quotation changes the shape | 200 | `c_f7c801ceb038` | unsure | 0.642 | BROKE |
+| EV04 | evasion | signal one: unusual words raise perplexity | 200 | `c_30e40ff06023` | unsure | 0.633 | BROKE |
+| EV05 | evasion | both signals: heavy human editing pass | 200 | `c_41652478cf19` | human | 0.334 | BROKE |
+| EV06 | evasion | signal two: one very long sentence and one very short | 200 | `c_97fee1cf085e` | unsure | 0.544 | BROKE |
+| EV07 | evasion | signal two: padding with punctuation | 200 | `c_fa2ba1426f96` | unsure | 0.526 | BROKE |
+| EV08 | evasion | signal one: text below the token window | 200 | `c_4f2d0e3f5f0c` | unsure | 0.356 | HELD |
+| EV09 | evasion | both: AI text with a human opening paragraph bolted on | 200 | `c_0dcc93bc8a3d` | unsure | 0.686 | BROKE |
+| EV10 | evasion | signal two: repeated stanza structure | 200 | `c_83e6b2cc7d31` | ai | 0.969 | HELD |
+| FP01 | false_positive | plain, clear human writing with no flourishes | 200 | `c_12dc18b45850` | unsure | 0.653 | HELD |
+| FP02 | false_positive | human writing in a formal register | 200 | `c_38f47177de1f` | ai | 0.773 | BROKE |
+| FP03 | false_positive | a non-native English speaker writing carefully | 200 | `c_ddc0675520d0` | ai | 0.820 | BROKE |
+| FP04 | false_positive | a student essay written to a rubric | 200 | `c_5a7d6445a528` | ai | 0.823 | BROKE |
+| FP05 | false_positive | technical documentation written by a person | 200 | `c_844a9dad9b68` | ai | 0.840 | BROKE |
+| FP06 | false_positive | a person imitating a formal template | 200 | `c_6e617d00cbaa` | ai | 0.851 | BROKE |
+| FP07 | false_positive | human writing that repeats a phrase deliberately | 200 | `c_34d694cb58b8` | ai | 0.841 | BROKE |
+| FP08 | false_positive | very short genuine human submission | 200 | `c_5a672b64c99c` | unsure | 0.398 | HELD |
+| PI01 | prompt_injection | instruction to ignore the check | 200 | `c_8630ed59feb1` | unsure | 0.476 | HELD |
+| PI02 | prompt_injection | instruction disguised as a system message | 200 | `c_839d2ea94289` | human | 0.267 | BROKE |
+| PI03 | prompt_injection | instruction wrapped in the writer's voice | 200 | `c_882dab45a3f6` | unsure | 0.616 | HELD |
+| PI04 | prompt_injection | attempt to make the label text hostile | 200 | `c_1b2570d096a9` | unsure | 0.512 | HELD |
+| PI05 | prompt_injection | attempt to inject into the audit log | 200 | `c_85a582101439` | unsure | 0.576 | HELD |
+| PI06 | prompt_injection | instruction plus real human text | 200 | `c_c3c3e62eccaf` | unsure | 0.608 | HELD |
+| MF01 | malformed | text is only whitespace | 400 | `—` | — | — | HELD |
+| MF02 | malformed | text is a single character | 500 | `—` | — | — | BROKE |
+| MF03 | malformed | text is control characters | 200 | `c_bda4941f8547` | human | 0.100 | BROKE |
+| MF04 | malformed | text is only punctuation | 200 | `c_66565bc550d9` | human | 0.109 | BROKE |
+| MF05 | malformed | text is a very long single word | 200 | `c_75258ca4dc4f` | unsure | 0.690 | HELD |
+| MF06 | malformed | text is emoji only | 200 | `c_76f9b685aeb0` | unsure | 0.690 | HELD |
+| MF07 | malformed | text is right-to-left script | 200 | `c_637ed64b4451` | unsure | 0.690 | HELD |
+| MF08 | malformed | text is 60,000 characters | 200 | `c_46ae290f3873` | ai | 0.971 | BROKE |
+| RQ01 | malformed | no text field at all | 400 | `—` | — | — | HELD |
+| RQ02 | malformed | no creator_id | 200 | `c_074ed6878d55` | human | 0.307 | HELD |
+| RQ03 | malformed | text is a number | 400 | `—` | — | — | HELD |
+| RQ04 | malformed | text is a list | 400 | `—` | — | — | HELD |
+| RQ05 | malformed | text is null | 400 | `—` | — | — | HELD |
+| RQ06 | malformed | creator_id is an object | 200 | `c_026643dd240f` | human | 0.139 | BROKE |
+| RQ07 | malformed | body is a JSON array, not an object | 400 | `—` | — | — | HELD |
+| RQ08 | malformed | body is unparseable JSON | 400 | `—` | — | — | HELD |
+| RQ09 | malformed | body is empty | 400 | `—` | — | — | HELD |
+| RQ10 | malformed | body is form-encoded, not JSON | 429 | `—` | — | — | HELD |
+| RQ11 | malformed | body is JSON claiming to be plain text | 429 | `—` | — | — | HELD |
+| RQ12 | malformed | deeply nested JSON | 400 | `—` | — | — | HELD |
+| FL01_01 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_24be0370f3f8` | human | 0.138 | HELD |
+| FL01_02 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_c38f0820f774` | human | 0.138 | HELD |
+| FL01_03 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_4a4e21f96305` | human | 0.138 | HELD |
+| FL01_04 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_028a34c2e358` | human | 0.138 | HELD |
+| FL01_05 | flood_same_creator | 20 rapid submissions from one creator | 200 | `c_ab22190aa97a` | human | 0.138 | HELD |
+| FL01_06 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_07 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_08 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_09 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_10 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_11 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
+| FL01_12 | flood_same_creator | 20 rapid submissions from one creator | 429 | `—` | — | — | HELD |
 
+Only two attacks changed label, and neither changed verdict:
+
+| Attack | Before | After | Verdict |
+|---|---|---|---|
+| EV01 (typos) | unsure 0.406 | **human** 0.285 | BROKE → BROKE, now worse |
+| RQ02 (no creator_id) | unsure 0.374 | human 0.307 | HELD → HELD |
+
+EV01 got *worse*. Its typos had already pushed signal one down to 0.16, and
+the high style score (0.77) was the only thing holding it in "unsure". With
+style at 0.2, that brake is mostly gone, and the typo'd AI text now gets a
+confident "probably written by a person."
 
 **Did it help, and how do I know:**
 
-<!-- Widening the unsure band usually fixes one problem and creates another.
-     Reporting that trade honestly is worth full credit. -->
+Partly. It helped criterion 2, did nothing for criterion 1, and made one
+evasion worse. From `results/run_2026-11-10_1951_after.md` (3 trials,
+identical again):
 
+| Criterion | Before | After | Verdict |
+|---|---|---|---|
+| 1. False positives (≤ 1 of 10) | 4 of 10 | 4 of 10 | MISSED → MISSED |
+| 2. Score spread (gap ≥ 0.35) | AI 0.781 / human 0.677 / gap 0.104 | AI 0.801 / human 0.629 / gap **0.172** | MISSED → MISSED |
+| 3. Label coverage (each ≥ 2) | human 4 · unsure 6 · AI 5 | human 3 · unsure 7 · AI 5 | MET → MET |
+| 4. Appeal path | 3 of 3 | not rerun (weights don't touch `/appeal`) | MET |
+| 5. Bad input (100% → 400) | 4 of 5 | 4 of 5 | MISSED → MISSED |
 
+What it fixed:
+- **The gap in criterion 2 grew by 65%** (0.104 → 0.172). Human scores came
+  down (0.677 → 0.629) and AI scores went up (0.781 → 0.801), because a
+  saturated signal was pulling both towards the same number. It's still about
+  half the 0.35 target.
+- **Every one of my ten pieces scored lower or the same.** My extension email
+  moved from unsure to human, and my criteria sentences went from 0.490 to
+  0.354, just above the human line.
+
+What it didn't fix:
+- **Criterion 1 stayed at 4 of 10.** My four flagged pieces dropped by 0.02–0.05
+  but stayed above 0.70 (0.729–0.772). Signal one scores them 0.70–0.72 on its
+  own, so no weighting gets them out. This is the part of my diagnosis I had
+  wrong at first: I treated it as a signal two problem only, and it's both.
+- **The false-positive attacks stayed at 6 of 8, and three got worse.** FP02,
+  FP03 and FP05 dropped a little (FP03, my worst outcome, went 0.835 → 0.820)
+  but stayed above 0.70. FP04, FP06 and FP07 went *up* (FP07 0.800 → 0.841),
+  because for those texts the model score is higher than the style score, so
+  giving the model more weight pushes them further into the AI band.
+
+What it cost:
+- **EV01 went from unsure to human.** Turning signal two down means signal one
+  decides more on its own, and signal one is the one that typos fool.
+- **One genuinely human sample lost its human label.** `samples/clearly_human.json`
+  (the "I didn't sleep" piece) went from human 0.309 to unsure 0.377. Its
+  style score was very human (0.11), and that now counts for less. A writer
+  whose *style* is clearly human gets less credit for it.
+
+How I know: the before and after runs use the same inputs and the same
+`scenarios.py`, and the only change between them was the two weights.
+Both runs were identical across all three trials, so the differences above
+come from the change, not from noise.
 
 ---
 
@@ -772,13 +907,69 @@ wrong label came from a wrong score upstream.
 <!-- For each attack still getting through and each criterion still missed:
      what you'd do, and why you stopped. -->
 
+After the reweight, 20 attacks still break and criteria 1, 2 and 5 still
+miss. They fall into the same three problems as the diagnosis, so I've
+grouped them that way.
 
+**1. Real writers still get called AI: FP02–FP07, criterion 1 (4 of 10) and
+criterion 2 (gap 0.172).**
+- *What I'd do:* raise `AI_THRESHOLD` from 0.70 to 0.85. Replaying my recorded
+  scores, that takes criterion 1 from 4 of 10 to 0 of 10, and the
+  false-positive attacks from 6 of 8 to 1 of 8. The longer-term fix is to
+  re-scale `stylometry.style_signal` on a much bigger set of human writing, so
+  plain writing stops pinning all three measures at the top. For criterion 2,
+  the threshold won't help, because averages don't move when a threshold does.
+  Only better signals will close that gap.
+- *Why I stopped:* the brief allowed one improvement, and I chose reweighting.
+  The threshold change also has a big cost I haven't tested in a real run: in
+  the replay, 9 of my 10 AI paragraphs drop to "unsure" as well. Re-scaling
+  the style signal properly needs far more human samples than the ten I have.
+
+**2. Edited AI text still gets through: EV01–EV07, EV09 and PI02.**
+- *What I'd do:* stop letting one signal decide on its own. Right now a
+  0.6/0.4 (now 0.8/0.2) weighted average means pushing one signal far enough
+  drags the total down. I'd add a rule that a very low score on one signal
+  can't produce "human" unless the other signal agrees, so a split lands in
+  "unsure" in both directions, not just the AI one. Typos and fake system lines
+  fool signal one, so I'd also strip or flag text with a high rate of
+  misspellings before scoring.
+- *Why I stopped:* every evasion fix makes the detector stricter, and stricter
+  means more real writers get flagged. My criteria say a wrong accusation
+  costs more than a missed detection, so I fixed false positives first. My
+  reweight also made EV01 worse (unsure → human), which is a sign this needs a
+  rule, not another weighting.
+
+**3. The route still scores input it shouldn't: MF02, MF03, MF04, MF08, RQ06
+and criterion 5 (4 of 5).**
+- *What I'd do:* validate in `app.py::submit` before either signal runs.
+  - Require at least 5 real words, which rejects MF02 (`"a"`), MF03 (control
+    characters) and MF04 (punctuation only).
+  - Reject text over about 10,000 characters, which fixes MF08 and criterion 5.
+  - Reject a `creator_id` that isn't a string, which fixes RQ06.
+  - Catch `ValueError` from the detector, so nothing can turn into a 500 again.
+  All of these return a 400 and get logged as rejections.
+- *Why I stopped:* this is the easiest fix on the list, but it wasn't the one
+  my biggest diagnosis pointed at, and I could only make one change. One
+  trade-off to settle first: a 5-word minimum would also reject the emoji and
+  Arabic inputs (MF06, MF07). They only "held" by luck at 0.69, but a clear 400
+  is still a worse experience for a real Arabic writer than an honest "we can't
+  check this language."
+
+**Held only by luck: MF05, MF06, MF07.** These scored exactly 0.69 because the
+style signal fell back to 0.5 and the disagreement cap held them under the AI
+line. They count as held, but nothing in my service actually handles them.
+Input validation (problem 3) is the real fix.
 
 **The trade I'd make if this ran for real:**
 
 <!-- Two sentences. Fewer wrong accusations means more AI text getting through.
      Say which way you'd go and WHO PAYS FOR IT. -->
 
+I'd raise the AI threshold to 0.85, so far fewer real writers get accused,
+including people like FP03, a non-native writer who did nothing wrong. The cost
+is that most AI text would be labelled "unsure" instead of "AI", and the people
+who pay for that are honest writers and readers on the platform, who end up
+sharing it with AI-written work the system won't name.
 
 
 <!-- ═════════════════════════════════════════════════════════════════════
