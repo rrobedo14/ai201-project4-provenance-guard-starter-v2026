@@ -243,9 +243,28 @@ The original decision is untouched; the appeal sits after it with the same `cont
      thresholds. Your numbers have to be liveable for the first and hostile to
      the second. -->
 
+A real writer submits a piece, maybe edits it and resubmits a few times. Five
+a minute covers that, even with a couple of quick retries, and 50 a day is
+more than anyone posting their own work would need. A script mapping my
+thresholds needs hundreds or thousands of variations. At 5 a minute it gets
+about one probe every 12 seconds, and at 50 a day it can't build up enough
+data points to find the 0.35 and 0.70 lines in any useful time. A lower limit,
+like 2 a minute, would start blocking a writer who fixes a typo and resubmits.
+A higher one, like 20 a minute, would let a script map the bands in an
+afternoon.
+
 **What a caller counts as:** <!-- per address, or per creator_id? They fail
 differently — one script can look like a thousand callers, and one household
 can look like one. -->
+
+Per `creator_id`, falling back to IP address. `app.py::rate_limit_key` uses
+`creator_id` when it's a non-empty string, and the caller's IP address
+otherwise: when the body isn't JSON, has no `creator_id`, or the `creator_id`
+isn't a string. The weak spot is that `creator_id` is whatever the caller
+types, so one script can send a new `creator_id` with every request and look
+like a thousand different writers, each with a fresh limit. The attack run
+showed the other side of the fallback: RQ10 and RQ11 got 429s because earlier
+anonymous requests had already used up my IP's 5 a minute.
 
 **The run of status codes when I pushed past it:**
 
@@ -338,7 +357,10 @@ time of the run: human ≤ 0.35, AI ≥ 0.70, disagreement gap 0.30.
 
 <!-- Choose entries that show the interesting failures, not the ten easiest. -->
 
-From `logs/audit.jsonl`, written by `audit.py`:
+From `logs/audit.jsonl`, written by `audit.py`. The first nine are from the
+before run. The last one, a rate-limit rejection, is from the after run: in the
+before run, rejections were only logged with six fields, which I fixed in
+`audit.py::log_rejection` so they carry all nine.
 
 ```json
 {"timestamp": "2026-11-10T23:38:14+00:00", "content_id": "c_dd2fb3aa938c", "creator_id": "attacker_FP03", "guess": "ai", "model_score": 0.8051, "style_score": 0.8805, "combined_score": 0.8353, "label": "We think this was probably written with AI. Our checks can be wrong, especially with plain or simple writing. If you wrote this yourself, you can appeal and a person will review it.", "status": "decided"}
@@ -350,7 +372,7 @@ From `logs/audit.jsonl`, written by `audit.py`:
 {"timestamp": "2026-11-10T23:38:16+00:00", "content_id": "c_6f014b0fb9f7", "creator_id": "attacker_MF05", "guess": "unsure", "model_score": 0.9976, "style_score": 0.5, "combined_score": 0.69, "label": "We can't tell whether this was written by a person or with help from AI. This is not an accusation. Lots of human writing ends up here, especially writing that is plain and simple.", "status": "decided"}
 {"timestamp": "2026-11-10T23:38:17+00:00", "content_id": "c_589ce9725e05", "creator_id": "attacker_MF08", "guess": "ai", "model_score": 0.9876, "style_score": 0.9039, "combined_score": 0.9541, "label": "We think this was probably written with AI. Our checks can be wrong, especially with plain or simple writing. If you wrote this yourself, you can appeal and a person will review it.", "status": "decided"}
 {"timestamp": "2026-11-10T23:38:17+00:00", "content_id": "c_bb1acfc95be2", "creator_id": {"id": "x"}, "guess": "human", "model_score": 0.0492, "style_score": 0.5, "combined_score": 0.2295, "label": "We think this was probably written by a person.", "status": "decided"}
-{"timestamp": "2026-11-10T23:38:18+00:00", "creator_id": "attacker_flood", "event": "rejected", "status": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
+{"timestamp": "2026-11-11T00:52:06+00:00", "content_id": null, "creator_id": "attacker_flood", "guess": null, "model_score": null, "style_score": null, "combined_score": null, "label": null, "status": "rejected", "event": "rejected", "reason": "rate_limited", "limit": "5 per 1 minute"}
 ```
 
 **The single worst outcome** — the one I'd least want to explain to a writer
@@ -412,9 +434,11 @@ that they vary.
   `POST /appeal` with the returned content_id, then `GET /log`. It passes if
   the appeal returns 200, the status changes, and an appeal entry appears in
   the log. All three did, so it holds 3 of 3. An unknown content_id correctly
-  returns 404. One mismatch: my criterion says the status becomes
-  `"appealed"`, but the service sets it to `"under_review"`. The behaviour the
-  criterion asks for happens; the status name in my criterion is wrong.
+  returns 404. My original criterion said the status becomes `"appealed"`,
+  a status my service never uses (it sets `"under_review"`). I revised it in
+  `criteria.md`, keeping the original line, because it measured the wrong
+  thing. The verdict is against the revised line, and the target is still
+  100%.
 - **Criterion 5: MISSED.** I counted how many of the five bad bodies got a
   400. Missing text, null, empty and whitespace-only all did, but the
   ~60,000-character body got a 200 and was labelled AI at 0.998. That's 4 of 5

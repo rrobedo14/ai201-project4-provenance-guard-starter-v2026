@@ -79,6 +79,18 @@ Across a test set of 15 diverse inputs, all three system labels (`likely_ai`, `u
 
 **Why this target:** I set a 100% target because creators disputing a false flag need an ironclad guarantee that their dispute is reliably tracked and recorded for human review without dropping data.
 
+> **Revised in unit 8:** 100% of appeals submitted with a valid `content_id`
+> return 200, add an appeal entry to the audit log with status
+> `"under_review"`, and leave the original decision entry in place, in a
+> single request cycle.
+>
+> **Why revised:** the original measured the wrong thing. It named a status,
+> `"appealed"`, that my service never uses. `/appeal` marks an item
+> `"under_review"`, which is what the starter's `audit.log_appeal` defines. As
+> written, the criterion would fail on a status name even when the appeal
+> worked perfectly. The target is still 100%; only the status it checks for
+> changed.
+
 ---
 
 ## 5. Bad input
